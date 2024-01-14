@@ -1,0 +1,79 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score
+
+
+train_data = pd.read_json('train.json')
+test_data = pd.read_json('test.json')
+
+
+X = train_data.drop(['pret', 'id'], axis=1)
+y = train_data['pret']
+
+# Adaugare doar categoriile care lipsesc în setul de antrenare
+unknown_categories = ['BMW_ALPINA', 'Toyota_Celica', 'Toyota_Verso', 'Audi_RS6', 'Opel_Ampera', 'Renault_Scenic RX4', 'Fiat_Barchetta', 'Infiniti_Q70', 'Infiniti_FX 30', 'Mitsubishi_Grandis', 'Land Rover_Altul', 'Dodge_Avenger', 'Citroën_Axel', 'Maserati_GranTurismo', 'Porsche_Altul', 'Aston Martin_V8 Vantage', 'BMW_M6', 'DS Automobiles_DS 3', 'Volkswagen_Lupo', 'Audi_Altul', 'Hyundai_ix55', 'Cadillac_CT6', 'Alfa Romeo_Brera', 'DS Automobiles_DS 5', 'Alfa Romeo_147', 'BMW_i8', 'Mitsubishi_L300', 'Peugeot_4007']  # Lista completă cu categoriile necunoscute
+for col in X.select_dtypes(include='category').columns:
+    if col in X.columns:
+        X[col] = X[col].astype('category').cat.add_categories(unknown_categories)
+        X[col] = X[col].cat.add_categories(['Unknown'])
+        X[col] = X[col].fillna('Unknown')  # Poți să înlocuiești categoriile necunoscute cu o valoare precum 'Unknown'
+
+# Separarea datelor în set de antrenare și set de validare
+X_train, X_valid, y_train, y_valid = train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=0)
+
+# Definirea transformărilor pentru diferite tipuri de date
+numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler', StandardScaler())
+])
+
+categorical_features = X.select_dtypes(include=['category']).columns
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='constant', fill_value='Unknown')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+
+# Combinare a transformărilor pentru a forma un transformator de coloane
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)
+    ])
+
+# Adaugare RandomForestRegressor la pipeline
+model = Pipeline(steps=[('preprocessor', preprocessor),
+                        ('regressor', RandomForestRegressor(random_state=0))])
+
+# Antrenare model
+model.fit(X_train, y_train)
+
+# Previziuni pe setul de validare
+y_pred = model.predict(X_valid)
+
+# Evaluare model
+r2 = r2_score(y_valid, y_pred)
+print(f'R2 Score pe setul de validare: {r2}')
+
+# Realizeazare predicții pentru datele de test
+features_numeric_test = test_data[numeric_features]
+features_categorical_test = test_data[categorical_features]
+
+# Concatenare caracteristicile pentru a forma setul complet de caracteristici pentru test
+features_test = pd.concat([features_numeric_test, features_categorical_test], axis=1)
+
+# Realizare predicții pentru setul de test
+y_pred_test = model.predict(features_test)
+
+# Înlocuire coloana "pret" din setul de test cu predicțiile
+test_data['pret'] = y_pred_test
+
+
+print("Date de test:")
+print(test_data.head())
+test_data.to_json('test.json', orient='records', lines=True, indent=4)
