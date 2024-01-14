@@ -21,7 +21,7 @@ for col in X.select_dtypes(include='category').columns:
     if col in X.columns:
         X[col] = X[col].astype('category').cat.add_categories(unknown_categories)
         X[col] = X[col].cat.add_categories(['Unknown'])
-        X[col] = X[col].fillna('Unknown')  # Poți să înlocuiești categoriile necunoscute cu o valoare precum 'Unknown'
+        X[col] = X[col].fillna('Unknown') 
 
 # Separarea datelor în set de antrenare și set de validare
 X_train, X_valid, y_train, y_valid = train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=0)
